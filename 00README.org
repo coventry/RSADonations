@@ -1,0 +1,204 @@
+* Overall design
+
+** Workflow
+
+1. Donor sends eth with a message containing the hash of the ssh RSA key.
+2. Donor can remove eth after a specified deadline, unless it's already been
+   claimed. This addresses the concern that the private key might be lost.
+3. Recipient hits a website which asks them for their public key, uses it to
+   construct an RSA-signed message, and submits it to the contract.
+4. Recipient can also construct the message offline, and submit it to the
+   website directly.
+5. Website gets a small cut of the donation. (But the amount can be specified,
+   so competitors can offer the same service.
+
+** Architecture
+
+*** Smart contract data
+
+    - Map from hashes to the public key in big-endian format (so that it only
+      needs to be sent in once.)
+    
+      struct PublicKey { uint256 exponent, uint256[] modulus }
+      maping(bytes32 => uint256[]) public publicKeys;
+      
+    - Map from hashes to the current account balance. 
+
+      mapping(bytes32 => uint256) public balances;
+
+    - Map from donors and public key hashes to { donation size, reclamation deadline, last update time }
+
+      struct Donation { uint256 amount, uint256 donationTime, uint256 reclamationDeadline, uint256 lastUpdate };
+      mapping(address => mapping(bytes32 => Donation)) public donations;
+
+    - Map from public key hashes to last donation extraction / receipt time
+
+      mapping(bytes32 /* publicKeyHash */ => uint256) lastDonationReceipts;
+
+    - Map from public key hashes to current nonce
+
+      mapping(bytes32 /* publicKeyHash */ => uint256) receiptNonces
+
+*** Events
+
+    - NewKeyRegistered(address sender, bytes32 publicKeyHash)
+    - DonationToKey(address sender, uint256 amount, uint256 newBalance, uint256 newSenderBalance, uint256 donationTime, uint256 reclamationDeadline, bytes32 publicKeyHash)
+    - DonationRetrieved(address sender, bytes32 publicKeyHash, uint256 amount, uint256 newBalance)
+    - DonationReceived(address to, address transmitter, uint256 transmitterReward, uint256 amount)
+    
+
+*** Smart contract methods
+
+**** donateToNewPublicKey(uint256 _amount, uint256 _reclamationDeadline, uint256[] _publicKey) public
+     
+     - Compute the hash of the _publicKey
+     - publicKeys[hash] = _publicKey (do I have to copy manually? probably)
+     - Check that modulus size is a multiple of 256 bits. Otherwise, emit
+       BadModulus(_publicKeyHash) event and exit.
+     - emit NewKeyRegistered(msg.sender, hash)
+     - Call donateToKnownPublicKey with the rest of the arguments
+
+**** donateToKnownPublicKey(uint256 _amount, uint256 _reclamationDeadline, bytes32 _publicKeyHash) public
+
+     - add { _amount, _reclamationDeadline, now } to donations[msg.sender][_publicKeyHash]
+       Update the _reclamationDeadline to whichever is later.
+     - if lastDonationReceipts[_publicKeyHash] is in the future, store _amount in
+       balances[_publicKeyHash]. Otherwise, add it to the current value.
+     - emit DonationToKey(msg.sender, _amount, newBalance, newSenderBalance, now, _reclamationDeadline, _publicKeyHash)
+
+**** retrieveDonation(_publicKeyHash) public
+
+     - check that donations[msg.sender][_publicKeyHash].reclamationDeadline is strictly in the past.
+       Otherwise emit DonationRetrievalTooSoon(msg.sender, _publicKeyHash) event and exit.
+     - check that lastUpdate is strictly after lastDonationReceipts[_publickeyhash].
+       Otherwise emit DonationAlreadyReceived(msg.sender, _publickeyhash, lastReceipt) event and exit.
+     - Delete donations[msg.sender][_publicKeyHash].
+     - Decrement balances[_publicKeyHash] by the donations amount.
+     - emit DonationRetrieved(msg.sender, _publicKeyHash, amount, newBalance)
+     - transfer the donations amount to msg.sender.
+
+**** receiveDonation(bytes32 _publicKeyHash, address _to, uint256 _transmitterReward, uint256[] _signature) public
+
+     - check that _transmitterReward is less than 1% of balances[_publicKeyHash].
+       Otherwise, emit TransmitterRewardTooLarge(msg.sender, _publicKeyHash, _to, balance, _transmitterReward, proportion)
+     - verify the signature with verify(_publicKeyHash, _to, _transmitterReward, _signature)
+     - zero out balances[_publicKeyHash]
+     - set lastDonationReceipts[_publicKeyHash] to now
+     - increment receiptNonces[_publicKeyHash]
+     - emit DonationReceived(_to, msg.sender, _transmitterReward, balance - _transmitterReward)
+     - transfer _transmitterReward to msg.sender
+     - transfer remainder of balance to _to.
+
+**** verify(bytes32 _publicKeyHash, address _to, uint256 _transmitterReward, uint256[] _signature) internal view
+
+     - compute the hash of the arguments, in that order. (not _publicKeyHash)
+     - fill a new ~uint256[publicKeys[_publicKeyHash].modulus.length] message~
+       array with keccak(hash, 0), keccak(hash, 1), ...
+     - raise that to key's exponent
+     - verify that the result matches the _signature.
+
+*** Off-chain processes
+
+    The receipt process will be implemented in web-based javascript, initially.
+    During receipt, the key will be accessed from the hard drive, via a file
+    dialog. It should operate completely independently of the web, if the user
+    wishes (so that the message may be generated offline, and uploaded
+    independently.)
+
+    There will be a server for getting the key for a website. 
+
+    There needs to be javascript to read a typical key. [[https://github.com/travist/jsencrypt][This library]] will
+    probably do the trick. [[http://jasonwatmore.com/post/2018/05/23/node-get-public-key-from-private-key-with-javascript][This snippet]] looks a lot simpler, though?
+
+    Yeah, [[http://jasonwatmore.com/post/2018/05/23/node-get-public-key-from-private-key-with-javascript][node-forge]] looks like the way to go, for this.
+    
+
+**** Get website RSA public key
+
+     This can be done with openssl like
+
+     ~openssl s_client -connect python.org:443 | openssl x509 -pubkey -noout | openssl rsa -noout -text -pubin~
+
+     It'll be done server-side... Probably just a python service, for now.
+
+**** Get a github RSA public key
+
+     Hit the github api [[https://api.github.com/users/coventry/keys][e.g.]] Parse with node-forge.
+
+     Given the potential for collaboration with Rachel and Valerie, this should
+     take lower priority.
+
+**** Send money to a public key
+     
+     - Get the amount in USD. (default $1)
+     - Convert to ETH via CMC or whatever.
+     - Get the reclamation deadline (default 1 year)
+     - Check that they have metamask, are logged in to metamask, have enough
+       money (search for "To verify if MetaMask has balance or not") on [[https://medium.com/crowdbotics/building-ethereum-dapps-with-meta-mask-9bd0685dfd57#7539][here]].
+     - Send the money. If the key is already in the contract, use
+       donateToKnownPublicKey, otherwise use donateToNewPublicKey. Just create a
+       transaction with web3.eth.Contract interface. Use it as a promise, and
+       you'll get a receipt. Checking for membership may require a view method.
+     - Check for the DonationToKey event. If present, display the details. If
+       not, verify that an error occurred, and report it. 
+
+**** Retrieve a donation
+
+     - Compute public key hash, and send to retrieveDonation.
+     - Check for DonationRetrieved event. If it succeeds, display details, and
+       the current user balance. If it fails, verify that an error has occurred,
+       and report it. (Check for error logs.)
+
+**** Receive a donation
+     - Construct signature as described below.
+     - 
+
+**** ReceiptTransmitter
+
+     Need a separate service for this. These are the endpoints
+
+***** Query price
+
+      Send publicKeyHash, desired tx reward
+      Replies with back its public address and the reward it's requesting
+
+*****  Send tx
+
+      Send hash and signature. It checks that its price is encoded in the
+      signature, and that the tx is valid, sends the tx to receiveDonation, and
+      sends back the tx receipt.
+
+**** Construct a signature
+
+     - Ask the user for the private key.
+     - Parse out the key parameters using node-forge. Actually, is that only
+       server-side? [[https://github.com/digitalbazaar/forge#building-for-a-web-browser][This]] suggests it's client-side as well?
+     - Construct hash as in the solidity verify message.
+     - Encrypt under that key. (Just exponentiate by the secret exponent.)
+
+** Challenge message
+
+   Need to avoid replay attacks.
+
+   - Some kind of nonce in the message... Use receiptNonces[_publicKeyHash].
+   - H = keccak of (nonce, _publicKeyHash, _to, _transmitterReward, msg.sender)
+   - Then concatenate keccak(H, 0), keccak(H, 1), ... etc.
+
+* Construction plan
+
+** MVP
+   Want to start with MVP for Rachel and Valerie, then build on top of that.
+   Start with this, then re-evaluate.
+
+*** Get website RSA key.
+
+   Takes a website, returns its public key and keccack hash for it.
+
+*** Send money to public key
+    - Solidity donate methods, and related events/data.
+    - Send tx functionality, but with no checking of price, for now.
+
+*** Retrieve money given private key's
+    - Construct signature offline, transmit.
+
+
