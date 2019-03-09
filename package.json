@@ -1,0 +1,19 @@
+{
+  "name": "rsa-donations",
+  "version": "1.0.0",
+  "description": "Donate ethereum to a RSA public key",
+  "main": "index.js",
+  "scripts": {
+    "test": "truffle test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coventry/RSADonations.git"
+  },
+  "author": "Alex Coventry",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/coventry/RSADonations/issues"
+  },
+  "homepage": "https://github.com/coventry/RSADonations#readme"
+}

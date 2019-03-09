@@ -53,13 +53,13 @@ contract RSADonations {
   event BadClaimSignature( // Fired when a claim has a bad signature
     address sender, bytes32 publicKeyHash, bytes32 signatureHash);
 
-  function publicKeyHash(uint256[] memory _modulus, uint256 _exponent, 
+  function publicKeyHash(uint256[] memory _modulus, uint256 _exponent,
     uint256 _size) public pure returns (bytes32) {
     return keccak256(abi.encodePacked(_modulus, _exponent, _size));
   }
 
   function donateToNewPublicKey(
-    uint256 _amount, uint256 _recoveryDeadline, uint256[] memory _keyModulus, 
+    uint256 _amount, uint256 _recoveryDeadline, uint256[]  memory _keyModulus,
     uint256 _keyExponent, uint256 _keySize) public {
     bytes32 keyHash = publicKeyHash(_keyModulus, _keyExponent, _keySize);
     if (_keyModulus.length * 256 != _keySize) {
@@ -136,7 +136,7 @@ contract RSADonations {
     uint256[] memory _signature) public view returns (bool) {
     uint256[] memory challengeMessage = claimChallengeMessage(
       _keyHash, _to, _transmitterReward);
-    uint256[] memory cipherText = encrypt(_keyHash, challengeMessage);
+    uint256[] memory cipherText; // = encrypt(_keyHash, challengeMessage); XXX
     for (uint256 i = 0; i < publicKeys[_keyHash].modulus.length; i++) {
       if (cipherText[i] != _signature[i]) {
         return false;
@@ -159,7 +159,7 @@ contract RSADonations {
   }
 
   function encrypt(bytes32 _keyHash, uint256[] memory _message)
-    public view returns (uint256[] memory cipherText) {
+    public /* view XXX */ returns (uint256[] memory) {
     PublicKey memory pk = publicKeys[_keyHash];
     require(_message.length <= pk.modulus.length,
       "Can't encrypt more information than the modulus.");
@@ -179,15 +179,22 @@ contract RSADonations {
     assert(cursor == inputSize);
     uint256 success;
     uint256 cipherTextLength = pk.modulus.length;
+    uint256[] memory cipherText = new uint256[](cipherTextLength);
     assembly {
-      cipherText := mload(0x40)
-      mstore(0x40, add(cipherText, inputSize)) // Allocate memory for result
       success := staticcall(
         not(0), // Allow arbitrary gas. XXX get this more precise
         0x05, // The bigmodexp precompiled contract address
         input, inputSize,
-        cipherText, cipherTextLength)
+        // Result address: one past the length value
+        // https://solidity.readthedocs.io/en/v0.4.24/miscellaneous.html#layout-of-state-variables-in-storage
+        add(cipherText, 1),
+        cipherTextLength)
     }
     require(success != 0, "bigModExp call failed.");
+    return cipherText;
+  }
+
+  function modulus(bytes32 _keyHash) public view returns (uint256[] memory) {
+    return publicKeys[_keyHash].modulus; // Used in truffle tests
   }
 }
