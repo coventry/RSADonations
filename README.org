@@ -1,0 +1,7 @@
+* Installation / deployment
+
+- Tested on ubuntu 18.04.
+- apt install openssl python-pip
+- pip install -r ./requirements.txt
+- Put a secret key (used for cookie/CSRF protection) in ~./app/secret_key.txt~.
+
