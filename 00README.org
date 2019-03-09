@@ -52,9 +52,9 @@
 **** donateToNewPublicKey(uint256 _amount, uint256 _reclamationDeadline, uint256[] _publicKey) public
      
      - Compute the hash of the _publicKey
-     - publicKeys[hash] = _publicKey (do I have to copy manually? probably)
      - Check that modulus size is a multiple of 256 bits. Otherwise, emit
        BadModulus(_publicKeyHash) event and exit.
+     - publicKeys[hash] = _publicKey (do I have to copy manually? probably)
      - emit NewKeyRegistered(msg.sender, hash)
      - Call donateToKnownPublicKey with the rest of the arguments
 
@@ -62,28 +62,29 @@
 
      - add { _amount, _reclamationDeadline, now } to donations[msg.sender][_publicKeyHash]
        Update the _reclamationDeadline to whichever is later.
-     - if lastDonationReceipts[_publicKeyHash] is in the future, store _amount in
-       balances[_publicKeyHash]. Otherwise, add it to the current value.
+     - if lastClaims[_publicKeyHash] is earlier than lastUpdate field, store
+       _amount in amount. Otherwise, add it to the current value.
+     - set lastUpdate to now
      - emit DonationToKey(msg.sender, _amount, newBalance, newSenderBalance, now, _reclamationDeadline, _publicKeyHash)
 
 **** retrieveDonation(_publicKeyHash) public
 
-     - check that donations[msg.sender][_publicKeyHash].reclamationDeadline is strictly in the past.
-       Otherwise emit DonationRetrievalTooSoon(msg.sender, _publicKeyHash) event and exit.
-     - check that lastUpdate is strictly after lastDonationReceipts[_publickeyhash].
-       Otherwise emit DonationAlreadyReceived(msg.sender, _publickeyhash, lastReceipt) event and exit.
+     - check that donations[msg.sender][_publicKeyHash].recoveryDeadline is
+       strictly in the past. Otherwise emit DonationRecoveryTooSoon(msg.sender,
+       _publicKeyHash) event and exit.
+     - check that lastUpdate is strictly after lastClaims[_publickeyhash].
+       Otherwise emit DonationAlreadyClaimed(msg.sender, _publickeyhash,
+       lastClaim) event and exit.
      - Delete donations[msg.sender][_publicKeyHash].
      - Decrement balances[_publicKeyHash] by the donations amount.
-     - emit DonationRetrieved(msg.sender, _publicKeyHash, amount, newBalance)
+     - emit DonationRecovered(msg.sender, _publicKeyHash, amount, newBalance)
      - transfer the donations amount to msg.sender.
 
-**** receiveDonation(bytes32 _publicKeyHash, address _to, uint256 _transmitterReward, uint256[] _signature) public
+**** claimDonation(bytes32 _publicKeyHash, address _to, uint256 _transmitterReward, uint256[] _signature) public
 
-     - check that _transmitterReward is less than 1% of balances[_publicKeyHash].
-       Otherwise, emit TransmitterRewardTooLarge(msg.sender, _publicKeyHash, _to, balance, _transmitterReward, proportion)
      - verify the signature with verify(_publicKeyHash, _to, _transmitterReward, _signature)
      - zero out balances[_publicKeyHash]
-     - set lastDonationReceipts[_publicKeyHash] to now
+     - set lastClaims[_publicKeyHash] to now
      - increment receiptNonces[_publicKeyHash]
      - emit DonationReceived(_to, msg.sender, _transmitterReward, balance - _transmitterReward)
      - transfer _transmitterReward to msg.sender
@@ -195,7 +196,9 @@
    Takes a website, returns its public key and keccack hash for it.
 
 *** Send money to public key
-    - Solidity donate methods, and related events/data.
+    - Solidity donate methods, and related events/data
+    - Check whether key is already present. If it is, use
+      donateToKnownPublicKey, else use donateToNewPublicKey.
     - Send tx functionality, but with no checking of price, for now.
 
 *** Retrieve money given private key's
