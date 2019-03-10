@@ -14,7 +14,7 @@
 
   Thus, being able to commit ETH to an RSA public key greatly broadens the scope
   for Ethereum-based donations, and gives donees a trustworthy incentivize to
-  adopt Ethereum in order to claim their donations.
+  adopt Ethereum, i.e. in order to claim their donations.
 
 * Current development state
 
@@ -59,7 +59,10 @@
 
 
   - Tested on ubuntu 18.04.
-  - apt install openssl python-pip
-  - pip install -r ./requirements.txt
+  - ~apt install openssl python-pip npm docker.io~
+  - ~pip install -r ./requirements.txt~
   - Put a secret key (used for cookie/CSRF protection) in ~./app/secret_key.txt~.
+  - ~npm install~
+  - ~docker pull ethereum/solc:0.5.2~
+
 
