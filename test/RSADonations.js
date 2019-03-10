@@ -63,4 +63,11 @@ contract("RSADonations", async accounts => {
     expect((await c.encrypt.call(jsHash, [message])).map(x => x.toNumber()))
       .to.deep.equal([(message ** exponent) % modulus])
   })
+  it("Produces the right challenge message", async () => {
+    msg = await c.claimChallengeMessage(jsHash, accounts[1], 1)
+    const nonce = (await c.claimNonce.call(jsHash)).toNumber()
+    initialHash = web3.utils.soliditySha3(nonce, accounts[1], 1, accounts[0])
+    expectedMessage = [new web3.utils.BN(web3.utils.soliditySha3(0, initialHash))]
+    expect(msg).to.deep.equal(expectedMessage)
+  })
 })
