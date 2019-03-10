@@ -115,7 +115,7 @@ contract RSADonations {
     msg.sender.transfer(donation.amount);
   }
 
-  function claimDonation(bytes32 _keyHash, address payable _to, 
+  function claimDonation(bytes32 _keyHash, address payable _to,
     uint256 _transmitterReward, uint256[] memory _signature) public {
     uint256 balance = balances[_keyHash];
     require(balance >= _transmitterReward, "Transmitter reward unpayable.");
