@@ -22,7 +22,7 @@ contract RSADonations {
   mapping(bytes32 /* public key hash */ =>
     uint256 /* Unix time when funds last taken */) public lastClaims;
   // Used in challenge message, to prevent replay attacks
-  mapping(bytes32 /* public key hash */ => uint256) claimNonce;
+  mapping(bytes32 /* public key hash */ => uint256) public claimNonce;
 
   event NewKeyRegistered(address sender, bytes32 publicKeyHash);
   event DonationToKey(
@@ -164,7 +164,7 @@ contract RSADonations {
   // verification. Don't use this for serious encryption without random padding,
   // etc.
   function encrypt(bytes32 _keyHash, uint256[] memory _message)
-    public /* view XXX */ returns (uint256[] memory) {
+    public view returns (uint256[] memory) {
     PublicKey memory pk = publicKeys[_keyHash];
     require(_message.length <= pk.modulus.length,
       "Can't encrypt more information than the modulus.");
