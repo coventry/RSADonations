@@ -30,8 +30,32 @@ const modulus = rawModulus.toString(16).match(/.{1,64}/g).map( // As uint256[]
 )
 const keySize = 256 * modulus.length
 const exponent = 3
-totient = p.sub(BN(1)).mul(q.sub(BN(1))) // Order of multiplicative group mod pq
-secretKey = BN(exponent).invm(totient)
+const bNToBI = n => bigInt(n.toString(16), 16)
+const bIToBN = n => new BN(n.toString(16), 16)
+totient = bIToBN(bigInt.lcm(bNToBI(p).prev(), bNToBI(q).prev())) // Order of every element divides this.
+secretKey = (new BN(exponent)).invm(totient)
+
+const rawMessage = [  // Another random RSA modulus, used here as just a plaintext
+  "ec2a291784455deb98050c1f7ca2dea1d59acc8f4125eedfc01354f3c5afe2ac",
+  "c312bfd5fb6cac4b29afa1cf8f457498c738554e6f9a3852324b3991db266aad",
+  "b0502f6087c6709985be338516412737f9661def0368cbc75ef8fa6f06594c1c",
+  "4f4f355b572e07a0fd227be0bb6f8e02adfb1c46ce6634280686e32169e291af",
+  "281cae1853d02a0f64e028d71a681aa864bf21ea55e80b4f6dac985c843e6769",
+  "6724f1f5029096a36ff7c0e94b56a098114f7d8c2d68da07a012d09f6680ace3",
+  "78ac902c9efc8813062ed9871dc7de55d7d6947f7efb5907abefa863709e8065",
+  "7ccd1784171dd20a4af208e22b823955526b8363ed5e18c17b0db510d076fa9f",
+  "7615148bc222aef5cc02860fbe516f50eacd6647a092f76fe009aa79e2d7f156",
+  "61895feafdb6562594d7d0e7c7a2ba4c639c2aa737cd1c2919259cc8ed933556",
+  "d82817b043e3384cc2df19c28b20939bfcb30ef781b465e3af7c7d37832ca60e",
+  "27a79aadab9703d07e913df05db7c70156fd8e2367331a1403437190b4f148d7",
+  "940e570c29e81507b270146b8d340d54325f90f52af405a7b6d64c2e421f33b4",
+  "b39278fa81484b51b7fbe074a5ab504c08a7bec616b46d03d009684fb3405671",
+  "bc5648164f7e440983176cc38ee3ef2aebeb4a3fbf7dac83d5f7d431b84f4032",
+  "be668bc20b8ee9052579047115c11caaa935c1b1f6af0c60bd86da88683b7d4f",
+]
+
+const messageUint256Array = rawMessage.map(s => new BN(s, 16))
+const fullMessage = new BN(rawMessage.join(''), 16)
 
 // Corresponds to RSADonations.sol#publicKeyHash
 const keyHash = (m, e, s) => web3.utils.soliditySha3(...[...m, e, s])
@@ -41,8 +65,9 @@ const jsHash = keyHash(modulus, exponent, keySize)
 // BN doesn't provide an obvious, convenient way to do this
 const bigModExp = (b, e, m) => {
   const bIB = bigInt(b.toString(16), 16) // BN => bigInt via string representation
+  const bIE = bigInt(e.toString(16), 16)
   const bIM = bigInt(m.toString(16), 16)
-  const modPow = bIB.modPow(e, bIM)
+  const modPow = bIB.modPow(bIE, bIM)
   return new BN(modPow.toString(16), 16) // bigInt => BN
 }
 
@@ -100,26 +125,6 @@ contract("RSADonations", async accounts => {
   it("Encrypts, given a key and a message", async () => {
     keyExponent = (await c.publicKeys.call(jsHash)).exponent.toNumber()
     assert.equal(keyExponent, exponent, "earlier tests should have registered key")
-    const rawMessage = [  // Another random RSA modulus, used here as just a plaintext
-      "ec2a291784455deb98050c1f7ca2dea1d59acc8f4125eedfc01354f3c5afe2ac",
-      "c312bfd5fb6cac4b29afa1cf8f457498c738554e6f9a3852324b3991db266aad",
-      "b0502f6087c6709985be338516412737f9661def0368cbc75ef8fa6f06594c1c",
-      "4f4f355b572e07a0fd227be0bb6f8e02adfb1c46ce6634280686e32169e291af",
-      "281cae1853d02a0f64e028d71a681aa864bf21ea55e80b4f6dac985c843e6769",
-      "6724f1f5029096a36ff7c0e94b56a098114f7d8c2d68da07a012d09f6680ace3",
-      "78ac902c9efc8813062ed9871dc7de55d7d6947f7efb5907abefa863709e8065",
-      "7ccd1784171dd20a4af208e22b823955526b8363ed5e18c17b0db510d076fa9f",
-      "7615148bc222aef5cc02860fbe516f50eacd6647a092f76fe009aa79e2d7f156",
-      "61895feafdb6562594d7d0e7c7a2ba4c639c2aa737cd1c2919259cc8ed933556",
-      "d82817b043e3384cc2df19c28b20939bfcb30ef781b465e3af7c7d37832ca60e",
-      "27a79aadab9703d07e913df05db7c70156fd8e2367331a1403437190b4f148d7",
-      "940e570c29e81507b270146b8d340d54325f90f52af405a7b6d64c2e421f33b4",
-      "b39278fa81484b51b7fbe074a5ab504c08a7bec616b46d03d009684fb3405671",
-      "bc5648164f7e440983176cc38ee3ef2aebeb4a3fbf7dac83d5f7d431b84f4032",
-      "be668bc20b8ee9052579047115c11caaa935c1b1f6af0c60bd86da88683b7d4f",
-    ]
-    const messageUint256Array = rawMessage.map(s => new BN(s, 16))
-    const fullMessage = new BN(rawMessage.join(''), 16)
     // message ** exponent % modulus
     const expectedVal = bigModExp(fullMessage, exponent, rawModulus).toString(16)
     const actual = await c.encrypt.call(jsHash, messageUint256Array)
@@ -139,7 +144,17 @@ contract("RSADonations", async accounts => {
     assert.equal(msg.map(x => x.toString(16)).join(""),
                  expectedMessage.join(""))
   })
-  it("Knows a good signature", () => {
-    
+  it("Knows a good signature", async () => {
+    keyExponent = (await c.publicKeys.call(jsHash)).exponent.toNumber()
+    assert.equal(keyExponent, exponent, "earlier tests should have registered key")
+    const [ to, txer, txReward ] = [ accounts[1], accounts[2], 1 ]
+    msg = await c.claimChallengeMessage(jsHash, to, txReward, { from: txer })
+    fullmsg = new BN(msg.map(n => n.toString(16)).join(""), 16)
+    console.log('exponent', exponent)
+    console.log('rawModulus', rawModulus)
+    decrypt = bigModExp(fullmsg, secretKey, rawModulus)
+    console.log('decrypt', decrypt)
+    assert.equal(bigModExp(decrypt, exponent, rawModulus).toString(16),
+                 fullmsg.toString(16))
   })
 })
