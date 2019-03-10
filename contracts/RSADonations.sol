@@ -136,7 +136,7 @@ contract RSADonations {
     uint256[] memory _signature) public view returns (bool) {
     uint256[] memory challengeMessage = claimChallengeMessage(
       _keyHash, _to, _transmitterReward);
-    uint256[] memory cipherText; // = encrypt(_keyHash, challengeMessage); XXX
+    uint256[] memory cipherText; encrypt(_keyHash, challengeMessage);
     for (uint256 i = 0; i < publicKeys[_keyHash].modulus.length; i++) {
       if (cipherText[i] != _signature[i]) {
         return false;
@@ -172,7 +172,7 @@ contract RSADonations {
     uint256[] memory input = new uint256[](inputSize);
     uint256 cursor = 0;
     // We're operating in words, here, but the bigmodexp API expects bytes.
-    input[cursor++] = _message.length * WORD; 
+    input[cursor++] = _message.length * WORD;
     input[cursor++] = WORD;
     input[cursor++] = pk.modulus.length * WORD;
     for (uint256 i = 0; i < _message.length; i++) {

@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/coventry/RSADonations/issues"
   },
-  "homepage": "https://github.com/coventry/RSADonations#readme"
+  "homepage": "https://github.com/coventry/RSADonations#readme",
+  "dependencies": {
+    "big-integer": "^1.6.26"
+  }
 }
