@@ -60,7 +60,7 @@ contract("RSADonations", async accounts => {
     keyExponent = (await c.publicKeys.call(jsHash)).exponent.toNumber()
     assert.equal(keyExponent, exponent, "earlier tests should have registered key")
     const message = 3
-    assert.equal((await c.encrypt.call(jsHash, [message])).map(x => x.toNumber()),
-                 [(message ** exponent) % modulus])
+    expect((await c.encrypt.call(jsHash, [message])).map(x => x.toNumber()))
+      .to.deep.equal([(message ** exponent) % modulus])
   })
 })

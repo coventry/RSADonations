@@ -201,7 +201,6 @@
       donateToKnownPublicKey, else use donateToNewPublicKey.
     - Send tx functionality, but with no checking of price, for now.
 
-*** Retrieve money given private key's
+*** Retrieve money given signature with private key
     - Construct signature offline, transmit.
-
 

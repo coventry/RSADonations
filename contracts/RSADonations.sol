@@ -158,6 +158,11 @@ contract RSADonations {
     return rv;
   }
 
+  uint256 constant WORD = 32; // Number of bytes in a 256-bit word
+
+  // NB: This is "text-book RSA" encryption, used here only for signature
+  // verification. Don't use this for serious encryption without random padding,
+  // etc.
   function encrypt(bytes32 _keyHash, uint256[] memory _message)
     public /* view XXX */ returns (uint256[] memory) {
     PublicKey memory pk = publicKeys[_keyHash];
@@ -166,9 +171,10 @@ contract RSADonations {
     uint256 inputSize = 3 + pk.modulus.length + 1 + _message.length;
     uint256[] memory input = new uint256[](inputSize);
     uint256 cursor = 0;
-    input[cursor++] = _message.length;
-    input[cursor++] = 1;
-    input[cursor++] = pk.modulus.length;
+    // We're operating in words, here, but the bigmodexp API expects bytes.
+    input[cursor++] = _message.length * WORD; 
+    input[cursor++] = WORD;
+    input[cursor++] = pk.modulus.length * WORD;
     for (uint256 i = 0; i < _message.length; i++) {
       input[cursor++] = _message[i];
     }
@@ -180,15 +186,16 @@ contract RSADonations {
     uint256 success;
     uint256 cipherTextLength = pk.modulus.length;
     uint256[] memory cipherText = new uint256[](cipherTextLength);
+    uint256 word = WORD; // Can't use constants in assembly
     assembly {
       success := staticcall(
         not(0), // Allow arbitrary gas. XXX get this more precise
         0x05, // The bigmodexp precompiled contract address
-        input, inputSize,
-        // Result address: one past the length value
+        // address of inputs is one word past the length value
         // https://solidity.readthedocs.io/en/v0.4.24/miscellaneous.html#layout-of-state-variables-in-storage
-        add(cipherText, 1),
-        cipherTextLength)
+        add(input, word), mul(inputSize, word),
+        add(cipherText, word), // Same logic as for input
+        mul(cipherTextLength, word))
     }
     require(success != 0, "bigModExp call failed.");
     return cipherText;
