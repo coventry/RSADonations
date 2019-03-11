@@ -16,6 +16,10 @@
   for Ethereum-based donations, and gives donees a trustworthy incentivize to
   adopt Ethereum, i.e. in order to claim their donations.
 
+  It happens that RSA cryptography can be done quite efficiently on the EVM, due
+  to the [modular exponentiation
+  precompile](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md)
+
 * Current development state
 
   - The contract is written, and the core components of it [[./test/RSADonations.js][have been tested.]]
@@ -26,7 +30,7 @@
 
 * Workflow
 
-  `RSADonations` commits ETH to an RSA public key, which can then be claimed by
+  ~RSADonations~ commits ETH to an RSA public key, which can then be claimed by
   the key owner by sending a message signed with the key.
 
   1. User specifies the real-world identity (domain name, github username, GPG
@@ -42,18 +46,23 @@
      the original sender can recover them by sending a message to the
      `recoverDonation` method. This mitigates the risk of sending to a keypair for
      which the private key has been lost.
-  5. The claimant constructs a message signed with the RSA private key,
-     containing a nonce, the ethereum address to send the funds to, a reward for
-     the transmitter of the message, which will be deducted from the funds, and
-     the transmitter. This enables the claimant to retrieve their funds without
-     already having any ETH, and makes it cost-effective to run a service which
-     sends such transactions.
-
+  5. The claimant constructs a message, signed with the RSA private key, and
+     containing 
+     - a nonce
+     - the ethereum address to send the funds to
+     - size of reward for
+       the transmitter of the message, which will be deducted from the funds
+     - the transmitter. Specifying this enables the claimant to retrieve their funds without
+       already having ETH, and makes it cost-effective to run a service which
+       sends such transactions.
+       
      The message construction needs to access the private key. The page which
      does this can operate offline, so that claimants can mitigate the risk of
-     exposing the private key. The message can then be pasted in to the
-     aforementioned ethereum transmission service, which then sends it to the
-     `claimDonation` method.
+     exposing the private key to whatever extent they wish. The message can then
+     be pasted in to the aforementioned ethereum transmission service, which
+     then sends it to the `claimDonation` method.
+
+  6. The contract verifies the signature, and transfers the funds if the message is valid.
 
 * Installation / deployment
 
@@ -62,7 +71,8 @@
   - ~apt install openssl python-pip npm docker.io~
   - ~pip install -r ./requirements.txt~
   - Put a secret key (used for cookie/CSRF protection) in ~./app/secret_key.txt~.
-  - ~npm install~
-  - ~docker pull ethereum/solc:0.5.2~
+  - `npm install`
+  - `docker pull ethereum/solc:0.5.2`
+  - `FLASK_APP=RSA_donations.py FLASK_DEBUG=1 flask run`
 
 
