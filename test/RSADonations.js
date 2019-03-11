@@ -29,12 +29,13 @@ const modulus = rawModulus.toString(16).match(/.{1,64}/g).map( // As uint256[]
   s => new BN(s, 16)
 )
 const keySize = 256 * modulus.length
-const exponent = 3
+const exponent = new BN(3)
 const bNToBI = n => bigInt(n.toString(16), 16)
 const bIToBN = n => new BN(n.toString(16), 16)
+
 // Since (ℤ/pqℤ)*≅(Z/(p-1)ℤ)×(Z/(q-1)ℤ), order of every element divides this.
 const totient = bIToBN(bigInt.lcm(bNToBI(p).prev(), bNToBI(q).prev()))
-const secretKey = (new BN(exponent)).invm(totient)
+const secretKey = exponent.invm(totient)
 
 const rawMessage = [ // Another random RSA modulus, used here as just a plaintext
   'ec2a291784455deb98050c1f7ca2dea1d59acc8f4125eedfc01354f3c5afe2ac',
@@ -123,8 +124,8 @@ contract('RSADonations', async accounts => {
       'there should be no profit from this misbehavior')
   })
   it('Encrypts, given a key and a message', async () => {
-    const keyExponent = (await c.publicKeys.call(jsHash)).exponent.toNumber()
-    assert.equal(keyExponent, exponent, 'earlier tests should have registered key')
+    const keyExponent = (await c.publicKeys.call(jsHash)).exponent
+    assert.equal(keyExponent, exponent, 'earlier tests should have regi&?stered key')
     // message ** exponent % modulus
     const expectedVal = bigModExp(fullMessage, exponent, rawModulus).toString(16)
     const actual = await c.encrypt.call(jsHash, messageUint256Array)
@@ -145,7 +146,7 @@ contract('RSADonations', async accounts => {
       expectedMessage.join(''))
   })
   it('Knows a good signature', async () => {
-    const keyExponent = (await c.publicKeys.call(jsHash)).exponent.toNumber()
+    const keyExponent = (await c.publicKeys.call(jsHash)).exponent
     assert.equal(keyExponent, exponent, 'earlier tests should have registered key')
     const [ to, txer, txReward ] = [ accounts[1], accounts[2], 1 ]
     const msg = await c.claimChallengeMessage(jsHash, to, txReward, { from: txer })
