@@ -1,14 +1,14 @@
 * Purpose 
 
   The [[https://github.com/coventry/RSADonations/blob/master/contracts/RSADonations.sol][RSADonations]] contract provides a way to send ETH to anyone with an RSA
-  keypair.
+  keypair. This is a WIP, mostly written during the ETH Paris hackathon.
 
 * Background
 
   Many more people own RSA keypairs than Ethereum addresses, and RSA public keys
   tend to be publicly associated to real-world identities:
 
-  - Most websites' SSL uses an RSA keypair, and this can [[http://ec2-35-180-46-67.eu-west-3.compute.amazonaws.com:5000/ssl_key/python.org][easily be retrieved]]
+  - Most websites' SSL uses an RSA keypair, and this can [[app/routes.py][easily be retrieved]]
   - Most heavy users of github have an RSA keypair, and this can [[https://api.github.com/users/coventry/keys][easily be retrieved]]
   - Many (perhaps most) GPG users have an RSA keypair
 
@@ -17,8 +17,7 @@
   adopt Ethereum, i.e. in order to claim their donations.
 
   It happens that RSA cryptography can be done quite efficiently on the EVM, due
-  to the [modular exponentiation
-  precompile](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md)
+  to the [[https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md][modular exponentiation precompile]]
 
 * Current development state
 
@@ -35,16 +34,16 @@
 
   1. User specifies the real-world identity (domain name, github username, GPG
      id).
-  2. The RSA public key for that identity is retrieved. (See `ssl_key` in
+  2. The RSA public key for that identity is retrieved. (See =ssl_key= in
      [[./app/routes.py][./app/routes.py]], or try adjusting the last field of [[http://ec2-35-180-46-67.eu-west-3.compute.amazonaws.com:5000/ssl_key/python.org][this URL]], assuming the
      service hasn't fallen over...
   3. User specifies the amount of ETH to send, and how long to commit it for.
-     This is sent to `RSADonations#donateToNewPublicKey` along with the key, if
+     This is sent to =RSADonations#donateToNewPublicKey= along with the key, if
      the contract doesn't already know about it, or
-     `RSADonations#donateToKnownPublicKey` if it does.
+     =RSADonations#donateToKnownPublicKey= if it does.
   4. If the commitment deadline expires before the key owner claims the funds,
      the original sender can recover them by sending a message to the
-     `recoverDonation` method. This mitigates the risk of sending to a keypair for
+     =recoverDonation= method. This mitigates the risk of sending to a keypair for
      which the private key has been lost.
   5. The claimant constructs a message, signed with the RSA private key, and
      containing 
@@ -60,7 +59,7 @@
      does this can operate offline, so that claimants can mitigate the risk of
      exposing the private key to whatever extent they wish. The message can then
      be pasted in to the aforementioned ethereum transmission service, which
-     then sends it to the `claimDonation` method.
+     then sends it to the =claimDonation= method.
 
   6. The contract verifies the signature, and transfers the funds if the message is valid.
 
@@ -71,8 +70,6 @@
   - ~apt install openssl python-pip npm docker.io~
   - ~pip install -r ./requirements.txt~
   - Put a secret key (used for cookie/CSRF protection) in ~./app/secret_key.txt~.
-  - `npm install`
-  - `docker pull ethereum/solc:0.5.2`
-  - `FLASK_APP=RSA_donations.py FLASK_DEBUG=1 flask run`
-
-
+  - =npm install=
+  - =docker pull ethereum/solc:0.5.2=
+  - =FLASK_APP=RSA_donations.py FLASK_DEBUG=1 flask run=
