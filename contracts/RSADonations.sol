@@ -128,8 +128,10 @@ contract RSADonations {
     lastClaims[_keyHash] = now;
     claimNonce[_keyHash] += 1;
     emit DonationClaimed(_to, msg.sender, _transmitterReward, balance);
-    msg.sender.transfer(_transmitterReward);
-    _to.transfer(balance - _transmitterReward);
+    return;
+    if (_transmitterReward > 0) { msg.sender.transfer(_transmitterReward); }
+    uint256 remainder = balance - _transmitterReward;
+    if (remainder > 0) { _to.transfer(remainder); }
   }
 
   function verify(bytes32 _keyHash, address payable _to, uint256 _transmitterReward,

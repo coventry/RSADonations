@@ -18,7 +18,7 @@ const uint256ArrayToBN = a => new BN(
 const modulus = bNToUint256Array(rawModulus)
 
 const keySize = 256 * modulus.length
-const exponent = new BN(47)
+const exponent = new BN(65537)
 const bNToBI = n => bigInt(n.toString(16), 16)
 const bIToBN = n => new BN(n.toString(16), 16)
 
@@ -136,5 +136,16 @@ contract('RSADonations', async accounts => {
     badSignature[0].iadd(new BN(1)) // Corrupt the signature
     assert(!(await c.verify(jsHash, to, txReward, badSignature, callOpts)),
       'Positive control failed')
+  })
+  it('Allows a valid donation claim', async () => {
+    const keyExponent = (await c.publicKeys.call(jsHash)).exponent
+    assert(keyExponent.eq(exponent), 'earlier tests should have registered key')
+    const [ to, txer, txReward ] = [ accounts[1], accounts[2], 1 ]
+    const callOpts = { from: txer }
+    const msg = await c.claimChallengeMessage(jsHash, to, txReward, callOpts)
+    const fullmsg = uint256ArrayToBN(msg).mod(rawModulus)
+    const signature = bNToUint256Array(bigModExp(fullmsg, secretKey, rawModulus))
+    const tx = await c.claimDonation(jsHash, to, 1, signature, callOpts)
+    console.log(tx.logs[0].args)
   })
 })
