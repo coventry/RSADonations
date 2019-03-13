@@ -145,6 +145,9 @@ contract RSADonations {
     return true;
   }
 
+  /* @dev Caller is responsible for reducing this by the modulus if
+   * necessary.
+   */
   function claimChallengeMessage(
     bytes32 _keyHash, address payable _to, uint256 _transmitterReward)
     public view returns (uint256[] memory) {
@@ -160,9 +163,10 @@ contract RSADonations {
 
   uint256 constant WORD = 32; // Number of bytes in a 256-bit word
 
-  // NB: This is "text-book RSA" encryption, used here only for signature
-  // verification. Don't use this for serious encryption without random padding,
-  // etc.
+  /* @dev NB: This is "text-book RSA" encryption, used here only for signature
+   * verification. Don't use this for serious encryption without random padding,
+   * etc.
+   */
   function encrypt(bytes32 _keyHash, uint256[] memory _message)
     public view returns (uint256[] memory) {
     PublicKey memory pk = publicKeys[_keyHash];
