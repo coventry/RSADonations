@@ -55,7 +55,7 @@ contract('RSADonations', async accounts => {
   it('Accepts a donation to a new public key, and records it',
     async () => {
       const tx = await c.donateToNewPublicKey(
-        amount, deadline, modulus, exponent, keySize)
+        deadline, modulus, exponent, keySize, { value: amount })
       const [ rLog, pLog ] = tx.logs
       assert.equal(rLog.event, 'NewKeyRegistered')
       assert.equal(pLog.event, 'DonationToKey')
@@ -74,9 +74,9 @@ contract('RSADonations', async accounts => {
     const cAmount = (await c.balances.call(jsHash)).toNumber()
     const dAmount = (await c.donations.call(accounts[0], jsHash)).amount.toNumber()
     await c.donateToNewPublicKey(
-      amount, deadline, modulus, exponent, keySize)
-    await c.donateToNewPublicKey(
-      amount, deadline, modulus, exponent, keySize)
+      deadline, modulus, exponent, keySize, { value: amount })
+    await c.donateToKnownPublicKey(
+      deadline, jsHash, { value: amount })
     assert.equal(await c.balances.call(jsHash), cAmount + 2 * amount)
     assert.equal((await c.donations.call(accounts[0], jsHash)).amount,
       dAmount + amount * 2)
@@ -137,15 +137,37 @@ contract('RSADonations', async accounts => {
     assert(!(await c.verify(jsHash, to, txReward, badSignature, callOpts)),
       'Positive control failed')
   })
-  it('Allows a valid donation claim', async () => {
+  it('Allows a valid donation claim, and accounts for it', async () => {
     const keyExponent = (await c.publicKeys.call(jsHash)).exponent
     assert(keyExponent.eq(exponent), 'earlier tests should have registered key')
-    const [ to, txer, txReward ] = [ accounts[1], accounts[2], 1 ]
+    const [ _to, txer, txReward ] = [ accounts[1], accounts[2], new BN(1) ]
+    const initialToBalance = new BN(await web3.eth.getBalance(_to), 10)
+    const initialNonce = await c.claimNonce.call(jsHash)
+    const initialLastClaim = await c.lastClaims.call(jsHash)
     const callOpts = { from: txer }
-    const msg = await c.claimChallengeMessage(jsHash, to, txReward, callOpts)
+    const msg = await c.claimChallengeMessage(jsHash, _to, txReward, callOpts)
     const fullmsg = uint256ArrayToBN(msg).mod(rawModulus)
     const signature = bNToUint256Array(bigModExp(fullmsg, secretKey, rawModulus))
-    const tx = await c.claimDonation(jsHash, to, 1, signature, callOpts)
-    console.log(tx.logs[0].args)
+    const tx = await c.claimDonation(jsHash, _to, 1, signature, callOpts)
+    const claimLog = tx.logs[0]
+    assert.equal(claimLog.event, 'DonationClaimed')
+    const { to, transmitter, transmitterReward, amount } = claimLog.args
+    assert.equal(to, _to)
+    assert.equal(transmitter, txer)
+    assert(transmitterReward.eq(txReward))
+    const newBalance = new BN(await web3.eth.getBalance(to), 10)
+    const balanceIncrease = newBalance.sub(initialToBalance)
+    assert(balanceIncrease.eq(amount.sub(txReward)),
+      'Sent value should match balance - txReward')
+    assert((new BN(1)).eq((await c.claimNonce.call(jsHash)).sub(initialNonce)),
+      'Nonce should be incremented')
+    assert(initialLastClaim.lt(await c.lastClaims.call(jsHash)),
+      'lastClaim field should be updated')
+    assert((new BN(0)).eq(await c.balances.call(jsHash)), 'Balance should be zeroed out')
+  })
+  it('Refuses recovery on a donation which has already been claimed', async () => {
+    const keyExponent = (await c.publicKeys.call(jsHash)).exponent
+    assert(keyExponent.eq(exponent), 'earlier tests should have registered key')
+
   })
 })

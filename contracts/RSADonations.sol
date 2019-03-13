@@ -58,9 +58,8 @@ contract RSADonations {
     return keccak256(abi.encodePacked(_modulus, _exponent, _size));
   }
 
-  function donateToNewPublicKey(
-    uint256 _amount, uint256 _recoveryDeadline, uint256[]  memory _keyModulus,
-    uint256 _keyExponent, uint256 _keySize) public {
+  function donateToNewPublicKey(uint256 _recoveryDeadline,
+    uint256[]  memory _keyModulus, uint256 _keyExponent, uint256 _keySize) public payable {
     bytes32 keyHash = publicKeyHash(_keyModulus, _keyExponent, _keySize);
     if (_keyModulus.length * 256 != _keySize) {
       emit BadModulus(keyHash);
@@ -70,28 +69,28 @@ contract RSADonations {
     publicKeys[keyHash].exponent = _keyExponent;
     publicKeys[keyHash].size = _keySize;
     emit NewKeyRegistered(msg.sender, keyHash);
-    donateToKnownPublicKey(_amount, _recoveryDeadline, keyHash);
+    donateToKnownPublicKey(_recoveryDeadline, keyHash);
   }
 
   function max(uint256 a, uint256 b) public pure returns(uint256) {
     return a > b ? a : b;
   }
 
-  function donateToKnownPublicKey(
-    uint256 _amount, uint256 _recoveryDeadline, bytes32 _keyHash) public {
+  function donateToKnownPublicKey(uint256 _recoveryDeadline, bytes32 _keyHash)
+    public payable {
     Donation memory donation = donations[msg.sender][_keyHash];
     donation.recoveryDeadline = max(donation.recoveryDeadline,
       _recoveryDeadline); // Whichever is later
     if (lastClaims[_keyHash] > donation.lastUpdate) {
-      donation.amount = _amount;
+      donation.amount = msg.value;
       emit DonationBalanceReset(msg.sender, _keyHash);
     } else {
-      donation.amount += _amount;
+      donation.amount += msg.value;
     }
     donation.lastUpdate = now;
     donations[msg.sender][_keyHash] = donation; // Copy back to storage
-    balances[_keyHash] += _amount;
-    emit DonationToKey(msg.sender, _amount, balances[_keyHash], donation.amount,
+    balances[_keyHash] += msg.value;
+    emit DonationToKey(msg.sender, msg.value, balances[_keyHash], donation.amount,
       _recoveryDeadline, _keyHash);
   }
 
@@ -128,7 +127,6 @@ contract RSADonations {
     lastClaims[_keyHash] = now;
     claimNonce[_keyHash] += 1;
     emit DonationClaimed(_to, msg.sender, _transmitterReward, balance);
-    return;
     if (_transmitterReward > 0) { msg.sender.transfer(_transmitterReward); }
     uint256 remainder = balance - _transmitterReward;
     if (remainder > 0) { _to.transfer(remainder); }
