@@ -9,9 +9,14 @@ const p = hexToBN('72964a78c96299f5a606066de508495f922f296539090e359a51150185651
 const q = hexToBN('81bf945d9b7e36061ca12e9fa7f197c10a7ae7520f109dd9cfdc67821e2b6e37')
 
 const rawModulus = p.mul(q)
-const modulus = rawModulus.toString(16).match(/.{1,64}/g).map( // As uint256[]
-  s => new BN(s, 16)
-)
+const bNToUint256Array = n => n.toString(16).match(/.{1,64}/g).map(
+  s => new BN(s, 16))
+const uint256ArrayToBN = a => new BN(
+  a.map(n => {
+    const s = n.toString(16); return '0'.repeat(64 - s.length) + s
+  }).join(''), 16)
+const modulus = bNToUint256Array(rawModulus)
+
 const keySize = 256 * modulus.length
 const exponent = new BN(47)
 const bNToBI = n => bigInt(n.toString(16), 16)
@@ -111,22 +116,25 @@ contract('RSADonations', async accounts => {
       const hash = web3.utils.soliditySha3(i, initialHash)
       assert.equal(hash.slice(0, 2), '0x')
       expectedMessage.push(hash.slice(2))
+      assert.equal(expectedMessage[expectedMessage.length - 1].length, 64)
     }
-    assert.equal(msg.map(x => x.toString(16)).join(''),
-      expectedMessage.join(''))
+    assert.equal(msg.map(x => {
+      const s = x.toString(16); return '0'.repeat(64 - s.length) + s
+    }).join(''), expectedMessage.join(''), 'Claim msg should match JS construction')
   })
-  it('Knows a good signature', async () => {
+  it('Knows a good signature from bad', async () => {
     const keyExponent = (await c.publicKeys.call(jsHash)).exponent
     assert(keyExponent.eq(exponent), 'earlier tests should have registered key')
     const [ to, txer, txReward ] = [ accounts[1], accounts[2], 1 ]
     const callOpts = { from: txer }
     const msg = await c.claimChallengeMessage(jsHash, to, txReward, callOpts)
-    const fullmsg = new BN(msg.map(n => n.toString(16)).join(''), 16).mod(rawModulus)
-    console.log('exponent', exponent)
-    console.log('rawModulus', rawModulus)
-    const decrypt = bigModExp(fullmsg, secretKey, rawModulus)
-    console.log('decrypt', decrypt)
-    assert.equal(bigModExp(decrypt, exponent, rawModulus).toString(16),
-      fullmsg.toString(16))
+    const fullmsg = uint256ArrayToBN(msg).mod(rawModulus)
+    const signature = bNToUint256Array(bigModExp(fullmsg, secretKey, rawModulus))
+    assert(await c.verify(jsHash, to, txReward, signature, callOpts),
+      'Contract should verify a good signature')
+    const badSignature = signature.slice()
+    badSignature[0].iadd(new BN(1)) // Corrupt the signature
+    assert(!(await c.verify(jsHash, to, txReward, badSignature, callOpts)),
+      'Positive control failed')
   })
 })

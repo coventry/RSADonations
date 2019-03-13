@@ -136,9 +136,10 @@ contract RSADonations {
     uint256[] memory _signature) public view returns (bool) {
     uint256[] memory challengeMessage = claimChallengeMessage(
       _keyHash, _to, _transmitterReward);
-    uint256[] memory cipherText; encrypt(_keyHash, challengeMessage);
-    for (uint256 i = 0; i < publicKeys[_keyHash].modulus.length; i++) {
-      if (cipherText[i] != _signature[i]) {
+    uint256[] memory cipherText = encrypt(_keyHash, _signature);
+    if (cipherText.length != challengeMessage.length) { return false; }
+    for (uint256 i = 0; i < cipherText.length; i++) {
+      if (cipherText[i] != challengeMessage[i]) {
         return false;
       }
     }

@@ -204,3 +204,7 @@
 *** Retrieve money given signature with private key
     - Construct signature offline, transmit.
 
+* Other notes
+
+[[https://www.fincen.gov/resources/statutes-regulations/administrative-rulings/definition-money-transmitter-merchant-payment][Simply submitting transactions between other peopl is not enough to make you a
+money transmitter.]]
