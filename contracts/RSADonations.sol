@@ -200,8 +200,4 @@ contract RSADonations {
     require(success != 0, "bigModExp call failed.");
     return cipherText;
   }
-
-  function modulus(bytes32 _keyHash) public view returns (uint256[] memory) {
-    return publicKeys[_keyHash].modulus; // Used in truffle tests
-  }
 }
