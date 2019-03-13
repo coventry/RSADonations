@@ -3,7 +3,7 @@ const BN = web3.utils.BN
 
 const RSADonations = artifacts.require('RSADonations')
 
-// 512-bit primes, via https://asecuritysite.com/encryption/random3?val=512
+// 256-bit primes, via https://asecuritysite.com/encryption/random3?val=256
 const hexToBN = s => new BN(s, 16)
 const p = hexToBN('72964a78c96299f5a606066de508495f922f296539090e359a51150185651291')
 const q = hexToBN('81bf945d9b7e36061ca12e9fa7f197c10a7ae7520f109dd9cfdc67821e2b6e37')
@@ -13,7 +13,7 @@ const modulus = rawModulus.toString(16).match(/.{1,64}/g).map( // As uint256[]
   s => new BN(s, 16)
 )
 const keySize = 256 * modulus.length
-const exponent = new BN(3)
+const exponent = new BN(47)
 const bNToBI = n => bigInt(n.toString(16), 16)
 const bIToBN = n => new BN(n.toString(16), 16)
 
@@ -119,8 +119,9 @@ contract('RSADonations', async accounts => {
     const keyExponent = (await c.publicKeys.call(jsHash)).exponent
     assert(keyExponent.eq(exponent), 'earlier tests should have registered key')
     const [ to, txer, txReward ] = [ accounts[1], accounts[2], 1 ]
-    const msg = await c.claimChallengeMessage(jsHash, to, txReward, { from: txer })
-    const fullmsg = new BN(msg.map(n => n.toString(16)).join(''), 16)
+    const callOpts = { from: txer }
+    const msg = await c.claimChallengeMessage(jsHash, to, txReward, callOpts)
+    const fullmsg = new BN(msg.map(n => n.toString(16)).join(''), 16).mod(rawModulus)
     console.log('exponent', exponent)
     console.log('rawModulus', rawModulus)
     const decrypt = bigModExp(fullmsg, secretKey, rawModulus)
