@@ -75,8 +75,7 @@ contract('RSADonations', async accounts => {
     const dAmount = (await c.donations.call(accounts[0], jsHash)).amount.toNumber()
     await c.donateToNewPublicKey(
       deadline, modulus, exponent, keySize, { value: amount })
-    await c.donateToKnownPublicKey(
-      deadline, jsHash, { value: amount })
+    await c.donateToKnownPublicKey(deadline, jsHash, { value: amount })
     assert.equal(await c.balances.call(jsHash), cAmount + 2 * amount)
     assert.equal((await c.donations.call(accounts[0], jsHash)).amount,
       dAmount + amount * 2)
@@ -168,6 +167,10 @@ contract('RSADonations', async accounts => {
   it('Refuses recovery on a donation which has already been claimed', async () => {
     const keyExponent = (await c.publicKeys.call(jsHash)).exponent
     assert(keyExponent.eq(exponent), 'earlier tests should have registered key')
-
+    assert((new BN(0)).eq(await c.balances.call(jsHash)),
+      'Claim should have been made by previous test')
+    await c.resetDonationDeadline(accounts[0], jsHash)
+    const tx = await c.recoverDonation(jsHash)
+    assert.equal(tx.logs[0].event, 'DonationAlreadyClaimed')
   })
 })

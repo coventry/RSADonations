@@ -53,6 +53,10 @@ contract RSADonations {
   event BadClaimSignature( // Fired when a claim has a bad signature
     address sender, bytes32 publicKeyHash, bytes32 signatureHash);
 
+  address owner; // Owner of the contract
+
+  constructor() public { owner = msg.sender; }
+
   function publicKeyHash(uint256[] memory _modulus, uint256 _exponent,
     uint256 _size) public pure returns (bytes32) {
     return keccak256(abi.encodePacked(_modulus, _exponent, _size));
@@ -112,6 +116,11 @@ contract RSADonations {
     emit DonationRecovered(
       msg.sender, _keyHash, donation.amount, balances[_keyHash]);
     msg.sender.transfer(donation.amount);
+  }
+
+  function resetDonationDeadline(address _from, bytes32 _keyHash) public {
+    require(msg.sender == owner, "Only owner can reset deadlines");
+    donations[_from][_keyHash].recoveryDeadline = 0;
   }
 
   function claimDonation(bytes32 _keyHash, address payable _to,
