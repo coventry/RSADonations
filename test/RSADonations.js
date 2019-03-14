@@ -34,6 +34,10 @@ const rawMessage = [ // random 512-bit RSA modulus as uint256[]. for plaintext
 const messageUint256Array = rawMessage.map(s => new BN(s, 16))
 const fullMessage = new BN(rawMessage.join(''), 16)
 
+const sleep = (milliseconds) => {
+  return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
 // Corresponds to RSADonations.sol#publicKeyHash
 const keyHash = (m, e, s) => web3.utils.soliditySha3(...[...m, e, s])
 
@@ -172,5 +176,12 @@ contract('RSADonations', async accounts => {
     await c.resetDonationDeadline(accounts[0], jsHash)
     const tx = await c.recoverDonation(jsHash)
     assert.equal(tx.logs[0].event, 'DonationAlreadyClaimed')
+  })
+  it('Allows recovery on an unclaimed donation where the deadline has expired', async () => {
+    await sleep(1500) // Make sure at least a second has passed since last claim, before donating
+    await c.donateToKnownPublicKey(0, jsHash, { value: amount })
+    await c.resetDonationDeadline(accounts[0], jsHash)
+    const tx = await c.recoverDonation(jsHash)
+    assert.equal(tx.logs[1].event, 'DonationRecovered')
   })
 })

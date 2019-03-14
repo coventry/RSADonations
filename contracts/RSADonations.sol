@@ -49,7 +49,7 @@ contract RSADonations {
   event DonationRecoveryTooSoon( // Fired on recovery before recoveryDeadline
     address sender, bytes32 publicKeyHash, uint256 recoveryDeadline);
   event DonationAlreadyClaimed( // Fired on recovery of donation already claimed
-    address sender, bytes32 publicKeyHash, uint256 lastClaim);
+    address sender, bytes32 publicKeyHash, uint256 lastClaim, uint256 recoveryTime);
   event BadClaimSignature( // Fired when a claim has a bad signature
     address sender, bytes32 publicKeyHash, bytes32 signatureHash);
 
@@ -82,6 +82,8 @@ contract RSADonations {
 
   function donateToKnownPublicKey(uint256 _recoveryDeadline, bytes32 _keyHash)
     public payable {
+    // Without this, the donation becomes unrecoverable.
+    require(lastClaims[_keyHash] < now, "Must make a donation at least 1s since last claim.");
     Donation memory donation = donations[msg.sender][_keyHash];
     donation.recoveryDeadline = max(donation.recoveryDeadline,
       _recoveryDeadline); // Whichever is later
@@ -106,7 +108,7 @@ contract RSADonations {
       return;
     }
     if (donation.lastUpdate <= lastClaims[_keyHash]) { // Not already claimed?
-      emit DonationAlreadyClaimed(msg.sender, _keyHash, lastClaims[_keyHash]);
+      emit DonationAlreadyClaimed(msg.sender, _keyHash, lastClaims[_keyHash], now);
       return;
     }
     delete donations[msg.sender][_keyHash];
