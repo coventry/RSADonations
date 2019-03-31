@@ -1,3 +1,4 @@
+
 * Overall design
 
 ** Workflow
@@ -135,7 +136,7 @@
      - Convert to ETH via CMC or whatever.
      - Get the reclamation deadline (default 1 year)
      - Check that they have metamask, are logged in to metamask, have enough
-       money (search for "To verify if MetaMask has balance or not") on [[https://medium.com/crowdbotics/building-ethereum-dapps-with-meta-mask-9bd0685dfd57#7539][here]].
+       money (search for "To verify if MetaMask has balance or not" on [[https://medium.com/crowdbotics/building-ethereum-dapps-with-meta-mask-9bd0685dfd57#7539][here]]).
      - Send the money. If the key is already in the contract, use
        donateToKnownPublicKey, otherwise use donateToNewPublicKey. Just create a
        transaction with web3.eth.Contract interface. Use it as a promise, and
@@ -191,6 +192,8 @@
    Want to start with MVP for Rachel and Valerie, then build on top of that.
    Start with this, then re-evaluate.
 
+   This is finished.
+
 *** Get website RSA key.
 
    Takes a website, returns its public key and keccack hash for it.
@@ -204,7 +207,110 @@
 *** Retrieve money given signature with private key
     - Construct signature offline, transmit.
 
+
+** Front end
+
+*** For donors
+
+**** Donation
+     - Search for an ssh RSA key or SSL RSA key on a github user profile / domain
+       name respectively.
+     - Have an option to show the key in the standard format.
+     - Set an amount and a recovery deadline.
+     - Send the funds via metamask.
+
+**** Recovery
+     - List live donations, and their expiration deadline, according to their
+       metamask address (web3.eth.accounts[0]).
+     - If it's past the deadline, allow them to recover the funds by sending a
+       message to recoverDonation.
+     
+*** For recipients
+    - Generation of the retrieval message and its signature should be separable
+      (though not necessarily separate by default), since the private key is
+      sensitive.
+    - The javascript signature functionality should be a single, saveable web
+      page, and this should be made clear to the user, so that they can isolate
+      it if they wish. It will ask the user to load the private key, which is
+      sketchy as hell.
+    - There should be a way to do the whole thing at the CL?
+    - It's probably possible to generate the message in javascript, have the
+      user sign it [[https://security.stackexchange.com/questions/36358/decrypt-from-cipher-text-encrypted-using-rsa][in openssl]], and then put the signature back in the web page.
+      That should reduce concerns of any abuse of the private key.
+
+      I think I can do this with something like
+
+      ~<bytes> | openssl rsautl -raw -decrypt -inkey ~/.ssh/id_rsa | hexdump~
+
+      ~raw~ indicates that there's no padding...
+
+      Maybe I can find something other than OpenSSL? It looks like OpenBSD [[https://www.libressl.org/][uses
+      openssl]] as the CL frontend, though. What is ubuntu using for the backend?
+      OpenSSL. Well, I'm only using it for the most basic stuff, anyway.
+
+      So I would need that, an probably extraction of the RSA key. Actually, it
+      [[https://crypto.stackexchange.com/questions/43697/what-is-the-difference-between-pem-csr-key-and-crt][looks like]] that is in a ~.key~ file which openssl can access as above.
+
+      So the page should do the following:
+      + Ask for the public key (possibly via the same search feature as before)
+      + Ask where the donation should be sent (ethereum address). Should be
+        EIP-55 checksummed. If the user gets it wrong, point them to a place
+        which will give them a valid EIP-55 capitalization, and tell them to
+        check /really carefully/.
+      + Ask for an alternative transmitter and transmitter reward.
+      + Produce the message from that request.
+      + Offer to sign it via the javscript in the page.
+      + Afford a way to enter the signature directly, and describe how to obtain
+        it via openssl and the private key.
+
+      There's a usability issue, here. We really want people to be able to send
+      a test message first? Or maybe the key just needs to be self-signed, to
+      prove the private key is known?
+
+      But if we let them send a test message then accounting within the contract
+      becomes far more complex, because we have to decide whose donation to
+      deduct the claim from. Maybe once a successful claim has been made,
+      donations shouldn't be recoverable anymore? I think that's probably a good
+      arrangement. The whole point of recovery is the risk that the recipient's
+      private key might be lost, and a successful claim shows that that wasn't
+      the case.
+
+      OK, so in addition to the above parameters, the claimant should specify an
+      amount, which defaults to something small, so that they can make sure
+      everything's working as anticipated.
+
+**** More detailed construction plan
+
+     Going to start with this, since it's probably the most complex part.
+     Initially:
+
+     - Just produce the claim message in javascript, let them sign it
+       themselves. It's probably a bad idea to do the signing in javascript,
+       with access to the private key.
+     - The message can be output from ~fullmsg~ in 'Allows a valid donation
+       claim, and accounts for it' in ~./test/RSADonations.js~.
+     - Convert from that to base64, and decode from that to go into the
+       signature command
+
+       ~echo $web_output | base64 -d | openssl rsautl -raw -decrypt -inkey ~/.ssh/id_rsa | base64~
+
+     - Check that that is producing the same output as the calculation in the
+       test.
+     - Have an input in the webpage for that output, and create the message
+       using web3.
 * Other notes
 
 [[https://www.fincen.gov/resources/statutes-regulations/administrative-rulings/definition-money-transmitter-merchant-payment][Simply submitting transactions between other peopl is not enough to make you a
 money transmitter.]]
+
+** [2019-03-30 Sat 12:40] 
+
+   For some reason, these tests are failing on my main laptop, even with a fresh
+   download from the github repo, where I know they used to work. Should test
+   them on my chromebook / the AWS box, and see whether it's some kind of
+   version skew...
+
+   I know I ran into a similar issue before...
+
+   I don't know how the hashes have changed, but it looks like the issue may be
+   that the challengeMessage is bigger than the modulus.
