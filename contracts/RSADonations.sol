@@ -1,4 +1,4 @@
-pragma solidity 0.5.2;
+pragma solidity 0.5.7;
 
 contract RSADonations {
 
@@ -157,9 +157,6 @@ contract RSADonations {
     return true;
   }
 
-  /* @dev Caller is responsible for reducing this by the modulus if
-   * necessary.
-   */
   function claimChallengeMessage(
     bytes32 _keyHash, address payable _to, uint256 _transmitterReward)
     public view returns (uint256[] memory) {
@@ -170,7 +167,10 @@ contract RSADonations {
     for (uint256 i = 0; i < pk.modulus.length; i++) {
       rv[i] = uint256(keccak256(abi.encodePacked(i, initialHash)));
     }
-    return rv;
+    if (rv[0] < pk.modulus[0]) { // Try to avoid expensive unnecessary bigmodexp
+      return rv;
+    }
+    return remainder(rv, pk.modulus);
   }
 
   uint256 constant WORD = 32; // Number of bytes in a 256-bit word
@@ -184,24 +184,34 @@ contract RSADonations {
     PublicKey memory pk = publicKeys[_keyHash];
     require(_message.length <= pk.modulus.length,
       "Can't encrypt more information than the modulus.");
-    uint256 inputSize = 3 + pk.modulus.length + 1 + _message.length;
+    return bigModExp(_message, pk.exponent, pk.modulus);
+  }
+
+  function remainder(uint256[] memory _dividend, uint256[] memory _divisor)
+    public view returns(uint256[] memory) {
+    return bigModExp(_dividend, 1, _divisor);
+  }
+
+  function bigModExp(uint256[] memory _base, uint256 _exponent, uint256[] memory _modulus)
+    public view returns (uint256[] memory) {
+    uint256 inputSize = 3 + _modulus.length + 1 + _base.length;
     uint256[] memory input = new uint256[](inputSize);
     uint256 cursor = 0;
     // We're operating in words, here, but the bigmodexp API expects bytes.
-    input[cursor++] = _message.length * WORD;
+    input[cursor++] = _base.length * WORD;
     input[cursor++] = WORD;
-    input[cursor++] = pk.modulus.length * WORD;
-    for (uint256 i = 0; i < _message.length; i++) {
-      input[cursor++] = _message[i];
+    input[cursor++] = _modulus.length * WORD;
+    for (uint256 i = 0; i < _base.length; i++) {
+      input[cursor++] = _base[i];
     }
-    input[cursor++] = pk.exponent;
-    for (uint256 i = 0; i < pk.modulus.length; i++) {
-      input[cursor++] = pk.modulus[i];
+    input[cursor++] = _exponent;
+    for (uint256 i = 0; i < _modulus.length; i++) {
+      input[cursor++] = _modulus[i];
     }
     assert(cursor == inputSize);
     uint256 success;
-    uint256 cipherTextLength = pk.modulus.length;
-    uint256[] memory cipherText = new uint256[](cipherTextLength);
+    uint256 outputLength = _modulus.length; // Can't use attributes in assembly
+    uint256[] memory output = new uint256[](2*outputLength); // XXX: Avoid memory corruption??
     uint256 word = WORD; // Can't use constants in assembly
     assembly {
       success := staticcall(
@@ -209,11 +219,16 @@ contract RSADonations {
         0x05, // The bigmodexp precompiled contract address
         // address of inputs is one word past the length value
         // https://solidity.readthedocs.io/en/v0.4.24/miscellaneous.html#layout-of-state-variables-in-storage
-        add(input, word), mul(inputSize, word),
-        add(cipherText, word), // Same logic as for input
-        mul(cipherTextLength, word))
+        add(input, word),
+        mul(inputSize, word), // Size of input, in bytes
+        add(output, word), // Same logic as for input
+        mul(outputLength, word)) // Size of output, in bytes
     }
     require(success != 0, "bigModExp call failed.");
-    return cipherText;
+    uint256[] memory actualOutput = new uint256[](outputLength);
+    for (uint256 i = 0; i < outputLength; i++) {
+      actualOutput[i] = output[i];
+    }
+    return actualOutput;
   }
 }

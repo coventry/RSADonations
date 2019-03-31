@@ -9,12 +9,11 @@ const p = hexToBN('72964a78c96299f5a606066de508495f922f296539090e359a51150185651
 const q = hexToBN('81bf945d9b7e36061ca12e9fa7f197c10a7ae7520f109dd9cfdc67821e2b6e37')
 
 const rawModulus = p.mul(q)
-const bNToUint256Array = n => n.toString(16).match(/.{1,64}/g).map(
-  s => new BN(s, 16))
+const zeroPadTo256Bits = s => '0'.repeat((65536 - s.length) % 64) + s
+const bNToUint256Array = n => zeroPadTo256Bits(n.toString(16)).match(/.{1,64}/g)
+  .map(s => new BN(s, 16))
 const uint256ArrayToBN = a => new BN(
-  a.map(n => {
-    const s = n.toString(16); return '0'.repeat(64 - s.length) + s
-  }).join(''), 16)
+  a.map(n => zeroPadTo256Bits(n.toString(16))).join(''), 16)
 const modulus = bNToUint256Array(rawModulus)
 
 const keySize = 256 * modulus.length
@@ -24,15 +23,19 @@ const bIToBN = n => new BN(n.toString(16), 16)
 
 // Since (ℤ/pqℤ)*≅(Z/(p-1)ℤ)×(Z/(q-1)ℤ), order of every element divides this.
 const totient = bIToBN(bigInt.lcm(bNToBI(p).prev(), bNToBI(q).prev()))
+// invm does not check this!!
+assert(!totient.mod(exponent).eq(new BN(0)), 'exponent must not divide totient')
 const secretKey = exponent.invm(totient)
+assert(secretKey.mul(exponent).umod(totient).eq(new BN(1)))
 
-const rawMessage = [ // random 512-bit RSA modulus as uint256[]. for plaintext
-  '102bf2e277b8415469cc0009c30cdfd90461c16d4c4722afbc8ddcb9b0527637',
-  '4fbea788819342f733d164d32729993d4bef8f6a388abfa2ace4081bfa3609d1'
+const rawMessage = [ // A signature of a challengeMessage
+  '4fa0331b7ed0a8e78cd92631e9d459ab3e89aaff38da30298a4a8f9dd9566f4',
+  '2cf1e88dfae7e28dd2006f9d26396c0b2a30294d0dc413dccb1f55347d3e2b69'
 ]
 
 const messageUint256Array = rawMessage.map(s => new BN(s, 16))
-const fullMessage = new BN(rawMessage.join(''), 16)
+const fullMessage = uint256ArrayToBN(messageUint256Array)
+assert(uint256ArrayToBN(bNToUint256Array(fullMessage)).eq(fullMessage))
 
 const sleep = (milliseconds) => {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
@@ -45,11 +48,8 @@ const jsHash = keyHash(modulus, exponent, keySize)
 
 // BN doesn't provide an obvious, convenient way to do this
 const bigModExp = (b, e, m) => {
-  const bIB = bigInt(b.toString(16), 16) // BN => bigInt via string representation
-  const bIE = bigInt(e.toString(16), 16)
-  const bIM = bigInt(m.toString(16), 16)
-  const modPow = bIB.modPow(bIE, bIM)
-  return new BN(modPow.toString(16), 16) // bigInt => BN
+  const [ bIB, bIE, bIM ] = [b, e, m].map(bNToBI)
+  return bIToBN(bIB.modPow(bIE, bIM))
 }
 
 contract('RSADonations', async accounts => {
@@ -114,16 +114,16 @@ contract('RSADonations', async accounts => {
     const msg = await c.claimChallengeMessage(jsHash, to, txReward, { from: txer })
     const nonce = (await c.claimNonce.call(jsHash)).toNumber()
     const initialHash = web3.utils.soliditySha3(nonce, to, txReward, txer)
-    const expectedMessage = []
+    let expectedMessage = []
     for (let i = 0; i < msg.length; i++) {
       const hash = web3.utils.soliditySha3(i, initialHash)
       assert.equal(hash.slice(0, 2), '0x')
       expectedMessage.push(hash.slice(2))
       assert.equal(expectedMessage[expectedMessage.length - 1].length, 64)
     }
-    assert.equal(msg.map(x => {
-      const s = x.toString(16); return '0'.repeat(64 - s.length) + s
-    }).join(''), expectedMessage.join(''), 'Claim msg should match JS construction')
+    expectedMessage = bNToUint256Array(uint256ArrayToBN(expectedMessage).mod(rawModulus))
+    assert(uint256ArrayToBN(expectedMessage).eq(uint256ArrayToBN(msg)),
+      'Claim msg should match JS construction')
   })
   it('Knows a good signature from bad', async () => {
     const keyExponent = (await c.publicKeys.call(jsHash)).exponent
@@ -132,11 +132,18 @@ contract('RSADonations', async accounts => {
     const callOpts = { from: txer }
     const msg = await c.claimChallengeMessage(jsHash, to, txReward, callOpts)
     const fullmsg = uint256ArrayToBN(msg).mod(rawModulus)
-    const signature = bNToUint256Array(bigModExp(fullmsg, secretKey, rawModulus))
+    const sigAsNum = bigModExp(fullmsg, secretKey, rawModulus)
+    assert(fullmsg.eq(bigModExp(sigAsNum, exponent, rawModulus)),
+      'signature should re-encrypt to message')
+    const signature = bNToUint256Array(sigAsNum)
+    const reencryption = await c.encrypt(jsHash, signature)
+    assert(uint256ArrayToBN(reencryption).eq(uint256ArrayToBN(msg)),
+      'Signature should encrypt to msg')
     assert(await c.verify(jsHash, to, txReward, signature, callOpts),
       'Contract should verify a good signature')
     const badSignature = signature.slice()
-    badSignature[0].iadd(new BN(1)) // Corrupt the signature
+    badSignature[0] = signature[0].add(new BN(1)) // iadd is not working?
+    assert(!signature[0].eq(badSignature[0]), 'Signature should be corrupted')
     assert(!(await c.verify(jsHash, to, txReward, badSignature, callOpts)),
       'Positive control failed')
   })
